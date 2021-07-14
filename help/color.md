@@ -16,7 +16,7 @@ sls alexa auth
 cd ..
 
 - sls alexa create --name ColorPicker --locale en-US --type custom
-- Serverless: [Skill ID] amzn1.ask.skill.7d8bba35-3a30-42e3-a694-aa8ab5ba940f
+- Serverless: [Skill ID] amzn1.ask.skill.e445454-3a30-er343-a694-erererererere
 
 # create manifests and update with skill
 - sls alexa manifests
