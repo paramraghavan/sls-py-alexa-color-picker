@@ -1,9 +1,5 @@
 # -*- coding: utf-8 -*-
 
-# This is a Color Picker Alexa Skill.
-# The skill serves as a simple sample on how to use
-# session attributes.
-
 import logging
 
 from ask_sdk_core.skill_builder import SkillBuilder
@@ -11,14 +7,19 @@ from ask_sdk_core.utils import is_request_type, is_intent_name
 from ask_sdk_core.handler_input import HandlerInput
 from ask_sdk_model import Response
 from ask_sdk_model.ui import SimpleCard
+import os
+from alexa_skills import aws_utils
+
+CIS_SERVICE_URL = os.environ['CIS_SERVICE_URL']
+CIS_AWS_ACCESS_KEY_ID = os.environ['CIS_AWS_ACCESS_KEY_ID']
+CIS_AWS_SECRET_ACCESS_KEY = os.environ.get('CIS_AWS_SECRET_ACCESS_KEY')
 
 
-skill_name = "ColorPicker"
-help_text = ("Please tell me your favorite color. You can say "
-             "my favorite color is red")
+skill_name = "CISDiagnosis"
+help_text = ("Please tell me your medical condition. You can say "
+             "I have cold headache.")
 
-color_slot_key = "COLOR"
-color_slot = "Color"
+report_slot = "report"
 
 sb = SkillBuilder()
 
@@ -30,7 +31,7 @@ logger.setLevel(logging.INFO)
 def launch_request_handler(handler_input):
     """Handler for Skill Launch."""
     # type: (HandlerInput) -> Response
-    speech = "Welcome to the Alexa Skills Kit color session sample."
+    speech = "Welcome, Tell me your medical condition."
 
     handler_input.response_builder.speak(
         speech + " " + help_text).ask(help_text)
@@ -63,29 +64,31 @@ def session_ended_request_handler(handler_input):
     # type: (HandlerInput) -> Response
     return handler_input.response_builder.response
 
-
-@sb.request_handler(can_handle_func=is_intent_name("WhatsMyColorIntent"))
-def whats_my_color_handler(handler_input):
-    """Check if a favorite color has already been recorded in
-    session attributes. If yes, provide the color to the user.
-    If not, ask for favorite color.
-    """
-    # type: (HandlerInput) -> Response
-    if color_slot_key in handler_input.attributes_manager.session_attributes:
-        fav_color = handler_input.attributes_manager.session_attributes[
-            color_slot_key]
-        speech = "Your favorite color is {}. Goodbye!!".format(fav_color)
-        handler_input.response_builder.set_should_end_session(True)
-    else:
-        speech = "I don't think I know your favorite color. " + help_text
-        handler_input.response_builder.ask(help_text)
-
-    handler_input.response_builder.speak(speech)
-    return handler_input.response_builder.response
+from io import StringIO
 
 
-@sb.request_handler(can_handle_func=is_intent_name("MyColorIsIntent"))
-def my_color_handler(handler_input):
+def getMedicalAnalysis(medical_report):
+    client = aws_utils.get_boto3_client(CIS_AWS_ACCESS_KEY_ID, CIS_AWS_SECRET_ACCESS_KEY, 'comprehendmedical')
+    response = client.detect_entities_v2(
+        Text=medical_report
+    )
+    mc_dict = {}
+    for entity in response['Entities']:
+        if entity["Category"] == "MEDICAL_CONDITION" and len(entity["Traits"]) > 0:
+            #print(f'| {entity["Text"]} |{entity["Category"]} |')
+            mc_dict[entity["Text"]] = entity["Category"]
+
+    #print(mc_dict)
+    string_buffer = StringIO()
+    for item in mc_dict:
+        string_buffer.write( item + ' is ' + mc_dict[item] + ' ')
+
+    return string_buffer.getvalue()
+
+
+
+@sb.request_handler(can_handle_func=is_intent_name("MedicalIntent"))
+def my_medical_diagnosis_handler(handler_input):
     """Check if color is provided in slot values. If provided, then
     set your favorite color from slot value into session attributes.
     If not, then it asks user to provide the color.
@@ -93,20 +96,16 @@ def my_color_handler(handler_input):
     # type: (HandlerInput) -> Response
     slots = handler_input.request_envelope.request.intent.slots
 
-    if color_slot in slots:
-        fav_color = slots[color_slot].value
-        handler_input.attributes_manager.session_attributes[
-            color_slot_key] = fav_color
-        speech = ("Now I know that your favorite color is {}. "
-                  "You can ask me your favorite color by saying, "
-                  "what's my favorite color ?".format(fav_color))
-        reprompt = ("You can ask me your favorite color by saying, "
-                    "what's my favorite color ?")
+    if report_slot in slots:
+        medical_report = slots[report_slot].value
+        speakOutput =  getMedicalAnalysis(medical_report)
+        # build json object as per the CISApi
+        # handler_input.attributes_manager.session_attributes[color_slot_key] = fav_color
+        speech = "Identified diseases are " + speakOutput
+        reprompt = ("That's " + speakOutput)
     else:
-        speech = "I'm not sure what your favorite color is, please try again"
-        reprompt = ("I'm not sure what your favorite color is. "
-                    "You can tell me your favorite color by saying, "
-                    "my favorite color is red")
+        speech = "I'm not sure, please try again"
+        reprompt = ("I'm not sure, please try again")
 
     handler_input.response_builder.speak(speech).ask(reprompt)
     return handler_input.response_builder.response
@@ -120,11 +119,8 @@ def fallback_handler(handler_input):
     """
     # type: (HandlerInput) -> Response
     speech = (
-        "The {} skill can't help you with that.  "
-        "You can tell me your favorite color by saying, "
-        "my favorite color is red").format(skill_name)
-    reprompt = ("You can tell me your favorite color by saying, "
-                "my favorite color is red")
+        "The {} skill can't help you with that.  " + help_text ).format(skill_name)
+    reprompt = (help_text)
     handler_input.response_builder.speak(speech).ask(reprompt)
     return handler_input.response_builder.response
 

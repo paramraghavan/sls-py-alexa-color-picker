@@ -36,3 +36,6 @@ serverless deploy -v --stage dev
 
 npm install --save serverless-python-requirements
 
+
+# CIs Diagnosis
+- sls alexa create --name CISDiagnosis --locale en-US --type custom
